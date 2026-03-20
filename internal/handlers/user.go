@@ -1,21 +1,28 @@
 package handlers
 
 import (
-	"api/internal/repository"
+	"api/internal/models"
+	"context"
 	"encoding/json"
 	"net/http"
 )
 
-type UserHandler struct {
-	repo *repository.UserRepository
+type UserRepository interface {
+	GetAll(ctx context.Context) ([]models.User, error)
 }
 
-func NewUserHandler(repo *repository.UserRepository) *UserHandler {
+type UserHandler struct {
+	repo UserRepository
+}
+
+func NewUserHandler(repo UserRepository) *UserHandler {
 	return &UserHandler{repo: repo}
 }
 
 func (h *UserHandler) GetUsers(w http.ResponseWriter, r *http.Request) {
-	users, err := h.repo.GetAll()
+	ctx := r.Context()
+
+	users, err := h.repo.GetAll(ctx)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

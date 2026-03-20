@@ -2,6 +2,7 @@ package repository
 
 import (
 	"api/internal/models"
+	"context"
 
 	"github.com/jmoiron/sqlx"
 )
@@ -14,8 +15,8 @@ func NewUserRepository(db *sqlx.DB) *UserRepository {
 	return &UserRepository{db: db}
 }
 
-func (r *UserRepository) GetAll() ([]models.User, error) {
+func (r *UserRepository) GetAll(ctx context.Context) ([]models.User, error) {
 	var users []models.User
-	err := r.db.Select(&users, "SELECT id, email, created_at FROM users")
+	err := r.db.SelectContext(ctx, &users, "SELECT id, email, created_at FROM users")
 	return users, err
 }
