@@ -2,14 +2,10 @@ package database
 
 import (
 	"fmt"
-	"io/ioutil"
-	"log"
-	"path/filepath"
-	"sort"
-	"strings"
 
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
+	"github.com/pressly/goose/v3"
 )
 
 func NewConnection(dataSourceName string) (*sqlx.DB, error) {
@@ -21,35 +17,13 @@ func NewConnection(dataSourceName string) (*sqlx.DB, error) {
 }
 
 func RunMigrations(db *sqlx.DB, dir string) error {
-	files, err := ioutil.ReadDir(dir)
-	if err != nil {
+	if err := goose.SetDialect("postgres"); err != nil {
 		return err
 	}
 
-	sort.Slice(files, func(i, j int) bool {
-		return files[i].Name() < files[j].Name()
-	})
-
-	for _, file := range files {
-		if filepath.Ext(file.Name()) != ".sql" {
-			continue
-		}
-
-		content, err := ioutil.ReadFile(filepath.Join(dir, file.Name()))
-		if err != nil {
-			return err
-		}
-
-		queries := strings.Split(string(content), ";")
-		for _, q := range queries {
-			if strings.TrimSpace(q) == "" {
-				continue
-			}
-			if _, err := db.Exec(q); err != nil {
-				return fmt.Errorf("migration %s failed: %w", file.Name(), err)
-			}
-		}
-		log.Printf("Migration applied: %s", file.Name())
+	if err := goose.Up(db.DB, dir); err != nil {
+		return fmt.Errorf("failed to apply migrations: %w", err)
 	}
+
 	return nil
 }
