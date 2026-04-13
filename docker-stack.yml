@@ -9,7 +9,6 @@ services:
     networks:
       - kafka-network
     deploy:
-      replicas: 1
       placement:
         constraints:
           - node.role == manager
@@ -20,6 +19,10 @@ services:
       - zookeeper
     ports:
       - "9092:9092"
+      - "5556:5556"
+    volumes:
+      - ./monitoring/kafka/jmx_prometheus_javaagent-0.18.0.jar:/opt/jmx_exporter/jmx_prometheus_javaagent.jar
+      - ./monitoring/kafka/kafka-jmx-config.yml:/opt/jmx_exporter/config.yml
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
@@ -27,15 +30,13 @@ services:
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_OPTS: "-javaagent:/opt/jmx_exporter/jmx_prometheus_javaagent.jar=5556:/opt/jmx_exporter/config.yml"
     networks:
       - kafka-network
     deploy:
       replicas: 1
       placement:
-        constraints:
-          - node.role == manager
+        constraints: [node.role == manager]
 
   postgres:
     image: postgres:15-alpine
@@ -48,21 +49,17 @@ services:
     networks:
       - kafka-network
     deploy:
-      replicas: 1
       placement:
         constraints:
           - node.role == manager
 
   api:
     image: study-go/api:latest
-    build:
-      context: .
-      dockerfile: Dockerfile.api
     environment:
-      - HOST=0.0.0.0
-      - PORT=8080
-      - DATABASE_URL=postgres://admin:admin@postgres:5432/study_db?sslmode=disable
-      - KAFKA_BROKERS=kafka:9092
+      HOST: 0.0.0.0
+      PORT: 8080
+      DATABASE_URL: postgres://admin:admin@postgres:5432/study_db?sslmode=disable
+      KAFKA_BROKERS: kafka:9092
     ports:
       - "8080:8080"
     depends_on:
@@ -71,7 +68,6 @@ services:
     networks:
       - kafka-network
     deploy:
-      replicas: 1
       update_config:
         parallelism: 1
         delay: 10s
@@ -82,13 +78,10 @@ services:
 
   worker:
     image: study-go/worker:latest
-    build:
-      context: .
-      dockerfile: Dockerfile.worker
     environment:
-      - DATABASE_URL=postgres://admin:admin@postgres:5432/study_db?sslmode=disable
-      - KAFKA_BROKERS=kafka:9092
-      - KAFKA_CONSUMER_GROUP=user-service-group
+      DATABASE_URL: postgres://admin:admin@postgres:5432/study_db?sslmode=disable
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_CONSUMER_GROUP: user-service-group
     depends_on:
       - kafka
     networks:
@@ -110,9 +103,62 @@ services:
           cpus: '0.25'
           memory: 128M
 
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    networks:
+      - kafka-network
+    configs:
+      - source: prometheus_config
+        target: /etc/prometheus/prometheus.yml
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      - kafka-network
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter
+    environment:
+      DATA_SOURCE_NAME: postgres://admin:admin@postgres:5432/study_db?sslmode=disable
+    networks:
+      - kafka-network
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+
+  kafka-exporter:
+    image: danielqsj/kafka-exporter
+    command:
+      - "--kafka.server=kafka:9092"
+    networks:
+      - kafka-network
+    deploy:
+      restart_policy:
+        condition: on-failure
+
 networks:
   kafka-network:
     driver: overlay
 
 volumes:
   pgdata:
+  grafana-data:
+
+configs:
+  prometheus_config:
+    file: ./prometheus.yml

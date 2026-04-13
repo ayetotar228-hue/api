@@ -9,7 +9,10 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -o /api ./cmd/api
+ARG SERVICE_NAME=api
+ARG SERVICE_PATH=./cmd/api
+
+RUN CGO_ENABLED=0 GOOS=linux go build -o /service ${SERVICE_PATH}
 
 FROM alpine:3.19
 
@@ -17,9 +20,10 @@ RUN apk --no-cache add ca-certificates tzdata
 
 WORKDIR /root/
 
-COPY --from=builder /api .
+COPY --from=builder /service .
 COPY --from=builder /app/migrations ./migrations
 
-EXPOSE 8080
+ARG SERVICE_PORT=8080
+EXPOSE ${SERVICE_PORT}
 
-CMD ["./api"]
+CMD ["./service"]

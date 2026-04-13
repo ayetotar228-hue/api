@@ -1,10 +1,13 @@
 package server
 
 import (
-	"api/internal/broker"
-	"api/internal/handlers"
-	"api/internal/repository"
-	"api/internal/storage"
+	"api/internal/application/handlers"
+	"api/internal/application/services"
+
+	"api/internal/infrastructure/repository"
+	"api/pkg/broker"
+	"api/pkg/broker/producer"
+	"api/pkg/storage"
 	"context"
 	"log"
 	"net/http"
@@ -14,22 +17,40 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+)
+
+var requestsTotal = prometheus.NewCounter(
+	prometheus.CounterOpts{
+		Name: "http_requests_total",
+		Help: "Total number of HTTP requests",
+	},
 )
 
 type Server struct {
 	httpServer     *http.Server
-	brokerProducer *broker.Producer
+	brokerProducer *producer.Producer
 	store          storage.Storager
 }
 
 func NewServer(addr string, store storage.Storager) *Server {
+	prometheus.MustRegister(requestsTotal)
+
 	router := mux.NewRouter()
 
 	brokerConfig := broker.LoadConfig()
-	brokerProducer := broker.NewProducer(brokerConfig.Brokers)
+	brokerProducer := producer.NewProducer(brokerConfig.Brokers)
 
 	userRepo := repository.NewUserRepository(store)
-	userHandler := handlers.NewUserHandler(userRepo, brokerProducer)
+	userService := services.NewUserService(userRepo, *brokerProducer)
+	userHandler := handlers.NewUserHandler(userService)
+
+	router.Handle("/metrics", promhttp.Handler())
+	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		requestsTotal.Inc()
+		w.Write([]byte("Hello"))
+	})
 
 	router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("OK"))
@@ -74,8 +95,13 @@ func (s *Server) Run() error {
 		log.Fatalf("Server forced to shutdown: %v", err)
 	}
 
-	s.brokerProducer.Close()
-	s.store.Close()
+	if s.brokerProducer != nil {
+		s.brokerProducer.Close()
+	}
+
+	if s.store != nil {
+		s.store.Close()
+	}
 
 	log.Println("API Server exited gracefully")
 	return nil

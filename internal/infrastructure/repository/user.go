@@ -1,8 +1,8 @@
 package repository
 
 import (
-	"api/internal/models"
-	"api/internal/storage"
+	"api/internal/domain/user"
+	"api/pkg/storage"
 	"context"
 )
 
@@ -14,24 +14,19 @@ func NewUserRepository(storage storage.Storager) *UserRepository {
 	return &UserRepository{storage: storage}
 }
 
-func (r *UserRepository) Create(ctx context.Context, email string) (*models.User, error) {
+func (r *UserRepository) Create(ctx context.Context, user *user.User) error {
 	db := r.storage.GetDB()
 
-	var user models.User
 	err := db.QueryRowContext(
 		ctx,
 		"INSERT INTO users (email) VALUES ($1) RETURNING id, email, created_at",
-		email,
+		user.Email,
 	).Scan(&user.ID, &user.Email, &user.CreatedAt)
 
-	if err != nil {
-		return nil, err
-	}
-
-	return &user, nil
+	return err
 }
 
-func (r *UserRepository) GetAll(ctx context.Context) ([]models.User, error) {
+func (r *UserRepository) GetAll(ctx context.Context) ([]user.User, error) {
 	db := r.storage.GetDB()
 
 	rows, err := db.QueryContext(ctx, "SELECT id, email, created_at FROM users")
@@ -40,9 +35,9 @@ func (r *UserRepository) GetAll(ctx context.Context) ([]models.User, error) {
 	}
 	defer rows.Close()
 
-	var users []models.User
+	var users []user.User
 	for rows.Next() {
-		var user models.User
+		var user user.User
 		if err := rows.Scan(&user.ID, &user.Email, &user.CreatedAt); err != nil {
 			return nil, err
 		}

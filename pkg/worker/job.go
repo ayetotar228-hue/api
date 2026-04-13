@@ -7,6 +7,7 @@ type Job struct {
 	Type    string
 	Payload interface{}
 	Context context.Context
+	Result  chan error
 }
 
-type JobHandler func(ctx context.Context, job Job) error
+type JobHandler func(ctx context.Context, payload interface{}) error

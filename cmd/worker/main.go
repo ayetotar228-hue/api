@@ -1,8 +1,10 @@
 package main
 
 import (
-	"api/internal/broker"
-	"api/internal/worker"
+	"api/pkg/broker"
+	"api/pkg/broker/consumer"
+	"api/pkg/broker/producer"
+	"api/pkg/worker"
 	"context"
 	"log"
 	"os"
@@ -13,12 +15,12 @@ import (
 
 func main() {
 	brokerConfig := broker.LoadConfig()
-
-	workerPool := worker.NewPool(10)
+	producer := producer.NewProducer(brokerConfig.Brokers)
+	workerPool := worker.NewPool(10, producer)
 	workerPool.Start()
 	defer workerPool.Stop()
 
-	consumer := broker.NewConsumer(
+	consumer := consumer.NewConsumer(
 		brokerConfig.Brokers,
 		brokerConfig.ConsumerGroup,
 		"user-events",

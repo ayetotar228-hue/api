@@ -1,7 +1,7 @@
 package repository
 
 import (
-	"api/internal/storage"
+	"api/pkg/storage"
 	"context"
 	"testing"
 	"time"
